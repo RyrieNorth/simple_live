@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timezone
 import requests
@@ -37,10 +37,25 @@ with app.app_context():
 
 # 直播服务器配置
 # 请确保这些地址是正确的，可能需要修改为您实际的服务器地址
-LIVE_SERVER = "http://192.168.1.200:8090"  # 修改为您的实际服务器地址
+LIVE_SERVER = "http://livego:8090"  # 修改为您的实际服务器地址
 RTMP_SERVER = "rtmp://192.168.1.200:1935"  # 修改为您的实际RTMP服务器地址
 FLV_URL = "http://192.168.1.200:7001/live/movie.flv"  # 修改为您的实际FLV流地址
 HLS_URL = "http://192.168.1.200:7002/live/movie.m3u8"  # 修改为您的实际HLS流地址
+
+# 解决跨域问题
+@app.route("/flv/<path:filename>")
+def proxy_flv(filename):
+    try:
+        proxy_url = f"http://livego:7001/flv/{filename}"
+        r = requests.get(proxy_url, stream=True)
+
+        def generate():
+            for chunk in r.iter_content(chunk_size=4096):
+                yield chunk
+
+        return Response(generate(), content_type=r.headers["Content-Type"])
+    except Exception as e:
+        return str(e), 502
 
 
 @app.route("/")
