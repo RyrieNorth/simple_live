@@ -1,0 +1,15 @@
+services:
+  simple_live:
+    image: simple_live:v1.0
+    ports:
+      - 50000:5000
+    restart: always
+
+  livego:
+    image: gwuhaolin/livego
+    ports:
+      - 1935:1935
+      - 7001:7001
+      - 7002:7002
+      - 18090:8090
+    restart: always
