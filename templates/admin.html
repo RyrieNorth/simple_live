@@ -1,0 +1,76 @@
+{% extends "base.html" %} {% block title %}用户管理{% endblock %} {% block
+content %}
+<div class="row">
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">添加用户</h5>
+      </div>
+      <div class="card-body">
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %} {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('admin') }}">
+          <div class="mb-3">
+            <label for="username" class="form-label">用户名</label>
+            <input
+              type="text"
+              class="form-control"
+              id="username"
+              name="username"
+              required
+            />
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label">密码</label>
+            <input
+              type="password"
+              class="form-control"
+              id="password"
+              name="password"
+              required
+            />
+          </div>
+          <button type="submit" class="btn btn-primary">添加用户</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">用户列表</h5>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>角色</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for user in users %}
+              <tr>
+                <td>{{ user.username }}</td>
+                <td>
+                  {% if user.is_admin %}
+                  <span class="badge bg-danger">管理员</span>
+                  {% else %}
+                  <span class="badge bg-secondary">普通用户</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,301 @@
+{% extends "base.html" %} {% block title %}直播观看{% endblock %} {% block
+content %}
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">直播内容</h5>
+      </div>
+      <div class="card-body">
+        <!-- 修改直播内容区域 -->
+        <div class="ratio ratio-16x9" id="live-video-container">
+          <video id="live-video" controls autoplay class="w-100 bg-dark">
+            <source src="{{ hls_url }}" type="application/x-mpegURL" />
+            您的浏览器不支持视频播放。
+          </video>
+        </div>
+
+        {% if is_admin and rtmp_push_url %}
+        <div class="mt-3">
+          <h6>推流地址 (管理员专用)</h6>
+          <div class="input-group mb-3">
+            <input
+              type="text"
+              class="form-control"
+              id="rtmp-url"
+              value="{{ rtmp_push_url }}"
+              readonly
+            />
+            <button class="btn btn-outline-secondary" onclick="copyRtmpUrl()">
+              复制
+            </button>
+          </div>
+          <p class="text-muted small">使用OBS等软件推流到此地址</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-4">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">聊天室</h5>
+      </div>
+      <div class="card-body chat-container">
+        <div id="chat-messages" class="mb-3"></div>
+        <div class="input-group">
+          <input
+            type="text"
+            id="chat-input"
+            class="form-control"
+            placeholder="输入消息..."
+          />
+          <button id="send-btn" class="btn btn-primary">发送</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">播放选项</h5>
+      </div>
+      <!-- 修改播放选项部分，隐藏移动端不支持的选项 -->
+      <div class="card-body">
+          <div class="btn-group w-100 mb-2" id="stream-buttons">
+              <button class="btn btn-outline-primary active" data-stream="hls">
+                  HLS
+              </button>
+              <button class="btn btn-outline-primary" data-stream="flv" id="flv-btn">
+                  FLV
+              </button>
+          </div>
+        <div class="form-check form-switch mt-2">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="low-latency-mode"
+          />
+          <label class="form-check-label" for="low-latency-mode"
+            >极低延迟模式</label
+          >
+        </div>
+        <div class="form-check form-switch mt-2">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="zero-latency-mode"
+          />
+          <label class="form-check-label" for="zero-latency-mode"
+            >零延迟模式</label
+          >
+        </div>
+        <div class="mt-2">
+          <small class="text-muted"
+            >极低/零延迟模式会减少缓冲，可能导致播放不稳定（慎用）</small
+          >
+        </div>
+        <div
+          id="latency-display"
+          class="mt-2 text-center text-muted small"
+        ></div>
+      </div>
+      </div>
+      <script>
+      // 添加移动端检测
+      if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+          document.getElementById('flv-btn').style.display = 'none';
+          document.getElementById('low-latency-mode').disabled = true;
+          document.getElementById('zero-latency-mode').disabled = true;
+      }
+      </script>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script src="{{ url_for('static', filename='js/flv.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+  function copyRtmpUrl() {
+    const copyText = document.getElementById("rtmp-url");
+    copyText.select();
+    copyText.setSelectionRange(0, 99999);
+    document.execCommand("copy");
+    alert("已复制推流地址: " + copyText.value);
+  }
+
+  // 直播播放器配置
+  const video = document.getElementById("live-video");
+  const lowLatencyMode = document.getElementById("low-latency-mode");
+  const zeroLatencyMode = document.getElementById("zero-latency-mode");
+  const latencyDisplay = document.getElementById("latency-display");
+  let currentPlayer = null;
+  let startPlayTime = Date.now();
+
+  // 测量和显示延迟
+  function updateTimeDisplay() {
+    const currentTime = new Date().toLocaleTimeString();
+    latencyDisplay.textContent = `当前时间: ${currentTime}`;
+    setTimeout(updateTimeDisplay, 1000);
+  }
+
+  // 开始测量延迟
+  updateTimeDisplay();
+
+  const streamSources = {
+    hls: "{{ hls_url }}",
+    flv: "{{ flv_url }}",
+  };
+
+  // 销毁当前播放器
+  function destroyCurrentPlayer() {
+    if (currentPlayer) {
+      if (currentPlayer.destroy) {
+        currentPlayer.destroy();
+      }
+      video.src = "";
+      video.load();
+    }
+    // 重置延迟测量
+    startPlayTime = Date.now();
+  }
+
+  // 初始化HLS播放器
+  function initHlsPlayer(url) {
+    // 现有代码保持不变
+    destroyCurrentPlayer();
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        // 极低延迟配置 - 大幅减少缓冲区
+        liveSyncDurationCount: lowLatencyMode.checked ? 1 : 2, // 减少到1个分片
+        maxBufferLength: lowLatencyMode.checked ? 2 : 5, // 减少最大缓冲长度
+        maxMaxBufferLength: lowLatencyMode.checked ? 4 : 10, // 减少绝对最大缓冲
+        highBufferWatchdogPeriod: lowLatencyMode.checked ? 0.5 : 1, // 更快检测高缓冲
+        // 额外的低延迟配置
+        liveDurationInfinity: true, // 无限直播模式
+        liveBackBufferLength: 0, // 禁用回FFER缓冲
+        enableWorker: true, // 启用Web Worker提高性能
+      });
+
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      currentPlayer = hls;
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // 原生HLS支持 (Safari)
+      video.src = url;
+      video.addEventListener("loadedmetadata", function () {
+        video.play().catch((e) => console.error("原生HLS播放错误:", e));
+      });
+    }
+  }
+
+  // 初始化FLV播放器
+  function initFlvPlayer(url) {
+    // 现有代码保持不变
+    destroyCurrentPlayer();
+
+    if (flvjs.isSupported()) {
+      const flvPlayer = flvjs.createPlayer({
+        type: "flv",
+        url: url,
+        isLive: true,
+        hasAudio: true,
+        hasVideo: true,
+        // 极低延迟配置
+        config: {
+          enableStashBuffer: !lowLatencyMode.checked,
+          stashInitialSize: lowLatencyMode.checked ? 64 : 128, // 减少初始缓冲区大小
+          lazyLoadMaxDuration: lowLatencyMode.checked ? 2 : 5, // 减少懒加载时长
+          seekType: "range", // 使用range请求提高效率
+          autoCleanupSourceBuffer: true, // 自动清理缓冲区
+          autoCleanupMaxBackwardDuration: 1, // 减少回FFER缓冲
+          autoCleanupMinBackwardDuration: 0, // 最小回hfill缓冲
+          fixAudioTimestampGap: false, // 禁用音频时间戳修复以减少延迟
+        },
+      });
+
+      flvPlayer.attachMediaElement(video);
+      flvPlayer.load();
+      flvPlayer.play();
+
+      currentPlayer = flvPlayer;
+    } else {
+      console.error("您的浏览器不支持FLV播放");
+    }
+  }
+
+  // 在页面加载时自动初始化HLS播放器
+  document.addEventListener("DOMContentLoaded", function () {
+    // 获取默认激活的按钮(HLS)
+    const activeBtn = document.querySelector("[data-stream].active");
+    if (activeBtn) {
+      // 模拟点击事件来初始化播放器
+      activeBtn.click();
+    }
+  });
+
+  // 切换播放协议
+  document.querySelectorAll("[data-stream]").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      document
+        .querySelectorAll("[data-stream]")
+        .forEach((b) => b.classList.remove("active"));
+      this.classList.add("active");
+
+      const streamType = this.dataset.stream;
+
+      if (streamType === "hls") {
+        initHlsPlayer(streamSources[streamType]);
+      } else if (streamType === "flv") {
+        initFlvPlayer(streamSources.flv);
+      }
+    });
+  });
+
+  // 低延迟模式切换
+  lowLatencyMode.addEventListener("change", function () {
+    // 重新加载当前活跃的播放源
+    const activeBtn = document.querySelector("[data-stream].active");
+    if (activeBtn) {
+      activeBtn.click();
+    }
+  });
+
+  // 零延迟模式切换
+  zeroLatencyMode.addEventListener("change", function () {
+    if (this.checked) {
+      // 如果启用零延迟，自动启用低延迟
+      lowLatencyMode.checked = true;
+      // 设置视频元素的属性以减少延迟
+      video.preload = "auto";
+      video.autoplay = true;
+      video.muted = true; // 静音可以减少一些浏览器的自动播放限制
+    }
+
+    // 重新加载当前活跃的播放源
+    const activeBtn = document.querySelector("[data-stream].active");
+    if (activeBtn) {
+      activeBtn.click();
+    }
+  });
+
+  // 断流自动重连
+  video.addEventListener("error", function () {
+    console.log("视频播放错误，尝试重新加载...");
+    setTimeout(() => {
+      const activeBtn = document.querySelector("[data-stream].active");
+      if (activeBtn) {
+        activeBtn.click();
+      }
+    }, 3000);
+  });
+
+  // 初始化聊天功能
+  const chatInput = document.getElementById("chat-input");
+  const sendBtn = document.getElementById("send-btn");
+  const chatMessages = document.getElementById("chat-messages");
+</script>
+{% endblock %}
