@@ -57,6 +57,20 @@ def proxy_flv(filename):
     except Exception as e:
         return str(e), 502
 
+@app.route("/hls/<path:filename>")
+def proxy_flv(filename):
+    try:
+        proxy_url = f"http://livego:7002/hls/{filename}"
+        r = requests.get(proxy_url, stream=True)
+
+        def generate():
+            for chunk in r.iter_content(chunk_size=4096):
+                yield chunk
+
+        return Response(generate(), content_type=r.headers["Content-Type"])
+    except Exception as e:
+        return str(e), 502
+
 
 @app.route("/")
 def home():
